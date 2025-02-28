@@ -1,0 +1,63 @@
+mysql -u root -p
+
+CREATE DATABASE taskun_data;
+
+データベース選択
+USE taskun_data;
+
+テーブル消す
+ drop table users;
+
+
+-- ユーザーテーブル
+CREATE TABLE users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(255) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  display_name VARCHAR(255) NOT NULL,
+  description TEXT,
+  profile_image LONGBLOB
+);
+
+-- タスクテーブル
+CREATE TABLE tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  description TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  creator_id INT,
+  FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- タスク参加テーブル
+CREATE TABLE task_participants (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT,
+  user_id INT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+
+
+
+////////////////////
+MySQL コマンドラインから users テーブルの全レコードを確認するには、以下の手順を実行してください。
+
+ターミナルまたはコマンドプロンプトで MySQL にログインします（ユーザー名やパスワードは環境に合わせて変更してください）:
+bash
+コピーする
+mysql -u root -p
+パスワードを入力したら、対象のデータベースを選択します（ここでは例として taskun_data を使用）:
+sql
+コピーする
+USE taskun_data;
+次に、users テーブルの全レコードを表示するコマンドを実行します:
+sql
+コピーする
+SELECT * FROM users;
+また、コマンドラインから一括して実行する場合は、以下のようにします:
+
+bash
+コピーする
+mysql -u root -p taskun_data -e "SELECT * FROM users;"
