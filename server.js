@@ -6,7 +6,7 @@ const app = express();
 // 画像や大きなペイロードも受け取れるように（10MBまで）
 app.use(express.json({ limit: '10mb' }));
 
-// MySQL 接続設定（適宜環境に合わせて変更）
+// MySQL 接続設定（環境に合わせて変更）
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
@@ -24,7 +24,6 @@ db.connect(err => {
 
 // ----------------------
 // 認証エンドポイント
-// ----------------------
 app.post('/register', (req, res) => {
   const { username, password, displayName } = req.body;
   if (!username || !password || !displayName) {
@@ -72,9 +71,6 @@ app.post('/login', (req, res) => {
 
 // ----------------------
 // タスク関連エンドポイント
-// ----------------------
-
-// GET /tasks - タスクリスト取得（ユーザー情報も結合）
 app.get('/tasks', (req, res) => {
   const query = `
     SELECT tasks.id, tasks.title, tasks.description, tasks.created_at, 
@@ -94,14 +90,12 @@ app.get('/tasks', (req, res) => {
       description: task.description,
       createdAt: task.created_at,
       creatorDisplayName: task.display_name,
-      // バイナリを base64 文字列に変換
       creatorProfileImage: task.profile_image ? Buffer.from(task.profile_image).toString('base64') : null
     }));
     res.json({ success: true, tasks });
   });
 });
 
-// POST /tasks - タスク登録
 app.post('/tasks', (req, res) => {
   const { userId, title, description } = req.body;
   if (!userId || !title || !description) {
@@ -117,7 +111,6 @@ app.post('/tasks', (req, res) => {
   });
 });
 
-// POST /tasks/join - タスク参加（参加者情報を記録）
 app.post('/tasks/join', (req, res) => {
   const { userId, taskId } = req.body;
   if (!userId || !taskId) {
@@ -135,9 +128,6 @@ app.post('/tasks/join', (req, res) => {
 
 // ----------------------
 // プロフィール取得／更新エンドポイント
-// ----------------------
-
-// GET /profile/:userId - プロフィール情報取得
 app.get('/profile/:userId', (req, res) => {
   const userId = req.params.userId;
   const query = 'SELECT display_name, description, profile_image FROM users WHERE id = ?';
@@ -159,13 +149,11 @@ app.get('/profile/:userId', (req, res) => {
   });
 });
 
-// POST /profile - プロフィール更新
 app.post('/profile', (req, res) => {
   const { userId, displayName, description, profileImageBase64 } = req.body;
   if (!userId || !displayName) {
     return res.status(400).json({ success: false, message: 'userId と displayName は必須です。' });
   }
-  
   let imageBuffer = null;
   if (profileImageBase64) {
     try {
@@ -175,7 +163,6 @@ app.post('/profile', (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid profileImageBase64 format' });
     }
   }
-  
   const query = 'UPDATE users SET display_name = ?, description = ?, profile_image = ? WHERE id = ?';
   db.query(query, [displayName, description || null, imageBuffer, userId], (err, result) => {
     if (err) {
@@ -187,8 +174,7 @@ app.post('/profile', (req, res) => {
 });
 
 // ----------------------
-// タスクスケジュール更新／取得エンドポイント（タスク共同編集用）
-// ----------------------
+// タスクスケジュール取得エンドポイント
 app.get('/tasks/schedule/:taskId', (req, res) => {
   const { taskId } = req.params;
   const query = 'SELECT id, scheduled_date, schedule_description FROM task_schedules WHERE task_id = ? ORDER BY scheduled_date ASC';
@@ -206,46 +192,24 @@ app.get('/tasks/schedule/:taskId', (req, res) => {
   });
 });
 
-// POST /tasks/schedule - タスクスケジュールの更新（新規 or 更新）
+// ----------------------
+// タスクスケジュール追加エンドポイント（常に新規作成）
 app.post('/tasks/schedule', (req, res) => {
   const { taskId, scheduledDate, schedule } = req.body;
   if (!taskId || !scheduledDate || !schedule) {
     return res.status(400).json({ success: false, message: 'taskId, scheduledDate, schedule は必須です。' });
   }
-  const selectQuery = 'SELECT * FROM task_schedules WHERE task_id = ?';
-  db.query(selectQuery, [taskId], (err, results) => {
+  const insertQuery = 'INSERT INTO task_schedules (task_id, scheduled_date, schedule_description) VALUES (?, ?, ?)';
+  db.query(insertQuery, [taskId, scheduledDate, schedule], (err, result) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ success: false, message: 'データベースエラー' });
     }
-    if (results.length > 0) {
-      // 更新
-      const updateQuery = 'UPDATE task_schedules SET scheduled_date = ?, schedule_description = ?, updated_at = NOW() WHERE task_id = ?';
-      db.query(updateQuery, [scheduledDate, schedule, taskId], (err, result) => {
-        if (err) {
-          console.error(err);
-          return res.status(500).json({ success: false, message: 'データベースエラー' });
-        }
-        return res.json({ success: true });
-      });
-    } else {
-      // 新規作成
-      const insertQuery = 'INSERT INTO task_schedules (task_id, scheduled_date, schedule_description) VALUES (?, ?, ?)';
-      db.query(insertQuery, [taskId, scheduledDate, schedule], (err, result) => {
-        if (err) {
-          console.error(err);
-          return res.status(500).json({ success: false, message: 'データベースエラー' });
-        }
-        return res.json({ success: true });
-      });
-    }
+    res.json({ success: true, scheduleId: result.insertId });
   });
 });
 
-// サーバー起動
 const PORT = process.env.PORT || 3000;
-//const HOST = '192.168.179.10';
-//const HOST = '192.168.46.10';
 const HOST = '172.18.104.114';
 app.listen(PORT, HOST, () => {
   console.log(`サーバーは ${HOST}:${PORT} で起動中です。`);

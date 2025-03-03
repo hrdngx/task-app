@@ -1,0 +1,291 @@
+1. API通信とデータモデル関連
+
+API用データクラス
+
+RegisterRequest / RegisterResponse
+ユーザーの会員登録に使用します。
+
+RegisterRequest：ユーザー名、パスワード、表示名を含むリクエストデータ。
+
+RegisterResponse：登録の成否、サーバー発行のトークン、ユーザーIDが返される。
+
+
+LoginRequest / LoginResponse
+ログイン時のリクエストとレスポンスを表現します。
+
+LoginRequest：ログインに必要なユーザー名とパスワード。
+
+LoginResponse：認証成功時にトークンとユーザーIDが返される。
+
+
+TaskCreationRequest / TaskCreationResponse
+タスクの作成に関するデータ。
+
+TaskCreationRequest：タスク作成時にユーザーID、タイトル、説明を送信。
+
+TaskCreationResponse：作成が成功したかどうかと、生成されたタスクIDが含まれる。
+
+
+TaskJoinRequest / TaskJoinResponse
+タスク参加のためのデータクラス。
+
+TaskJoinRequest：参加するユーザーとタスクIDを指定。
+
+TaskJoinResponse：参加処理が成功したかどうかを返す。
+
+
+TaskData / TaskListResponse
+タスクリストの取得に用いられる。
+
+TaskData：各タスクのID、タイトル、説明、作成日時、作成者の表示名、プロフィール画像（Base64文字列）の情報。
+
+TaskListResponse：タスクリスト取得の結果とタスクのリストを返す。
+
+
+ProfileUpdateRequest / ProfileUpdateResponse / ProfileDataResponse
+ユーザープロフィールの更新および取得に利用。
+
+ProfileUpdateRequest：ユーザーID、更新後の表示名、自己紹介、（オプションの）プロフィール画像(Base64)を送信。
+
+ProfileUpdateResponse：更新成功の有無を返す。
+
+ProfileDataResponse：プロフィール取得時に表示名、自己紹介、プロフィール画像（Base64）が返される。
+
+
+ScheduleData / ScheduleListResponse / ScheduleAddRequest / ScheduleAddResponse
+タスクに紐づくスケジュール管理に関するデータ。
+
+ScheduleData：スケジュールのID、予定日時、説明。
+
+ScheduleListResponse：スケジュール一覧取得の成否とスケジュールのリスト。
+
+ScheduleAddRequest：新規スケジュール登録時にタスクID、予定日時、スケジュール説明を送信。
+
+ScheduleAddResponse：登録処理の成功と新たに割り当てられたスケジュールIDが返される。
+
+
+
+Retrofit API インターフェース
+
+ApiService
+Retrofitを用いたAPI呼び出しのインターフェースです。
+各HTTPメソッド（@POST, @GET）でエンドポイントを定義し、上記のデータクラスを用いてリクエスト・レスポンスをシリアライズ／デシリアライズします。
+
+
+Retrofit クライアント
+
+RetrofitClient
+シングルトンとしてRetrofitインスタンスを構築し、ApiServiceを生成。
+
+ベースURL（ここでは "http://172.18.104.114:3000/"）を指定し、Gsonコンバーターを利用してJSONの変換を行っています。
+
+
+
+
+---
+
+2. セッション管理
+
+SessionManager
+
+SessionManagerクラス
+アプリ内でユーザーの認証情報（トークン、ユーザーID）を管理するために、SharedPreferencesを利用。
+
+saveAuthToken(token: String)：トークンを保存する。
+
+fetchAuthToken()：保存されたトークンを取得する。
+
+saveUserId(userId: Int)：ユーザーIDを保存。
+
+fetchUserId()：保存されたユーザーIDを取得。
+
+clearSession()：ログアウト時などにセッション情報を削除する。
+
+
+
+
+---
+
+3. 画像処理とプロフィール画像表示
+
+Base64→Bitmap変換
+
+decodeBase64ToBitmap(base64String: String)
+Base64文字列からバイト配列に変換し、BitmapFactoryでBitmapに変換。
+
+例外処理も含まれており、デコード失敗時はログにエラーを出力し、nullを返します。
+
+
+
+プロフィール画像用 Composable 関数
+
+ProfileImage(base64String: String, modifier: Modifier)
+Base64文字列からBitmapに変換し、ComposeのImageとして表示。
+
+変換に成功すれば、画像を丸いシェイプで表示し、枠線も付加。
+
+失敗した場合は、デフォルトのアイコン（Personアイコン）を表示。
+
+
+ProfileImagePreview(base64String: String)
+プロフィール更新画面などで画像のプレビューとして使用。
+
+Base64文字列が空でなければProfileImageを呼び出し、そうでなければ丸い枠内にアイコンを表示して「画像未選択」を示す。
+
+
+
+
+---
+
+4. メインアクティビティとナビゲーション
+
+MainActivity
+
+MainActivity
+アプリのエントリーポイントとなるActivityです。
+
+onCreate内でSessionManagerを初期化し、保存された認証情報の有無に応じて、開始画面を「register」または「main」に設定。
+
+Jetpack ComposeのsetContentを用いて、MaterialTheme内にNavigationコンポーザブルを配置。
+
+
+
+ナビゲーションと画面遷移
+
+NavHost
+MainActivity内で、登録画面、ログイン画面、メイン画面（ログイン後の画面）の3つのルートを定義。
+
+それぞれの画面で、認証情報に基づいた画面遷移（popUpToでスタックをクリア）を実施。
+
+
+
+
+---
+
+5. 各画面（Composable）の詳細
+
+会員登録画面 – RegistrationScreen
+
+RegistrationScreen
+ユーザーにユーザーネーム、パスワード、表示名の入力を促す画面。
+
+入力内容をOutlinedTextFieldで受け付け、登録ボタン押下時にRetrofitを利用してregister APIを呼び出す。
+
+登録成功時には、取得したトークンとユーザーIDをSessionManagerに保存し、画面を「main」へ遷移させる。
+
+
+
+ログイン画面 – LoginScreen
+
+LoginScreen
+会員登録済みユーザー向けのログイン画面。
+
+ユーザーネームとパスワードを入力し、ログインボタン押下時にlogin APIを呼び出す。
+
+成功時にはセッション情報を保存し、MainScreenへ遷移する仕組み。
+
+
+
+メイン画面と内部ナビゲーション – MainScreen
+
+MainScreen
+ログイン後の主要画面。
+
+TopAppBarに「たすくん」というタイトルとログアウトボタンを配置。ログアウト時はSessionManagerのクリアと「login」画面への遷移を行う。
+
+内部で別のNavHost（innerNavController）を用い、タスクリスト、タスク登録、プロフィール登録、スケジュール管理といった各画面を管理。
+
+
+
+ボトムナビゲーション – BottomNavigationBar
+
+BottomNavigationBar
+下部に固定のナビゲーションバーを表示し、各主要画面（タスクリスト、タスク登録、プロフィール、スケジュール管理）への遷移をサポート。
+
+各ナビゲーション項目は、画面のルートとアイコン、ラベルが定義され、選択状態に応じたハイライトも実施。
+
+
+
+タスクリスト画面 – TaskListScreen
+
+TaskListScreen
+APIから取得したタスクのリストをLazyColumnで表示する画面。
+
+各タスクはCardでレイアウトされ、作成者のプロフィール画像（またはアイコン）、タスクタイトル、説明、作成日時が表示される。
+
+「タスク参加」ボタンを押すと、joinTask APIを呼び出し、成功時に該当タスクのスケジュール管理画面（taskScheduleManagement/{taskId}）へ遷移。
+
+
+
+タスク登録画面 – TaskRegistrationScreen
+
+TaskRegistrationScreen
+新規タスクを作成するための画面。
+
+タスクタイトルと説明の入力フィールドを提供し、ボタン押下時にcreateTask APIを呼び出してタスクを登録する。
+
+
+
+プロフィール登録・更新画面 – ProfileRegistrationScreen
+
+ProfileRegistrationScreen
+ユーザーのプロフィール情報（表示名、自己紹介、プロフィール画像）の表示および更新を行う画面。
+
+画面初期表示時に、getProfile APIを呼び出して既存のプロフィール情報を取得。
+
+プロフィール画像は、rememberLauncherForActivityResultを用いてユーザーの端末から選択し、Base64エンコード後に保存。
+
+「プロフィール更新」ボタン押下時に、updateProfile APIへ更新内容を送信。
+
+
+
+カレンダー範囲選択 – CalendarRangePicker
+
+CalendarRangePicker
+指定した月の日付グリッドを表示し、ユーザーが開始日と終了日を選択できるようにするコンポーザブル。
+
+現在の年月や月初日の曜日、月の日数を計算し、LazyVerticalGridでセルごとに日付を表示。
+
+選択状態に応じて、セルの背景色を変え（範囲内、エッジの場合）、日付の選択処理を提供。
+
+
+
+タスクスケジュール管理画面 – TaskScheduleManagementScreen
+
+TaskScheduleManagementScreen
+指定されたタスクIDに紐づくスケジュールの管理画面。
+
+taskIdが0の場合は「タスク未選択」として、タスクリスト画面へ戻すボタンを表示。
+
+正常なtaskIdの場合は、ViewModel（TaskScheduleViewModel）を利用して、既存のスケジュール一覧を取得・表示。
+
+カレンダーコンポーネント（CalendarRangePicker）で開始日・終了日を選択し、入力されたタスク説明とともにaddSchedule APIを呼び出し、新規スケジュールを登録する仕組みを提供。
+
+
+
+
+---
+
+6. ViewModelとユーティリティ関数
+
+タスクスケジュール管理用 ViewModel – TaskScheduleViewModel
+
+TaskScheduleViewModel
+指定されたタスクIDに対するスケジュール情報の取得・管理、そして新規スケジュール追加のロジックを担当。
+
+fetchSchedules()：API呼び出しにより、スケジュール一覧を取得し、内部のschedules状態を更新する。
+
+addSchedule(startDate, endDate, description)：選択された日付範囲と説明をもとに、フォーマット済みのスケジュール文字列を作成し、APIに送信。成功時はスケジュール一覧を再取得。
+
+
+
+ユーティリティ関数
+
+isSameDay(date1, date2)
+二つのDateオブジェクトが同一の日（年月日が同じかどうか）かどうかを判定する。
+
+SimpleDateFormatを使い「yyyyMMdd」形式に変換して比較。
+
+
+formatDate(date)
+Dateオブジェクトを「yyyy/MM/dd」の形式で文字列にフォーマットする。
