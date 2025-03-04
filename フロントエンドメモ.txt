@@ -52,7 +52,7 @@ ProfileUpdateResponse：更新成功の有無を返す。
 ProfileDataResponse：プロフィール取得時に表示名、自己紹介、プロフィール画像（Base64）が返される。
 
 
-ScheduleData / ScheduleListResponse / ScheduleAddRequest / ScheduleAddResponse
+Scheduleata / ScheduleListResponse / ScheduleAddRequest / ScheduleAddResponse
 タスクに紐づくスケジュール管理に関するデータ。
 
 ScheduleData：スケジュールのID、予定日時、説明。
@@ -70,7 +70,7 @@ Retrofit API インターフェース
 ApiService
 Retrofitを用いたAPI呼び出しのインターフェースです。
 各HTTPメソッド（@POST, @GET）でエンドポイントを定義し、上記のデータクラスを用いてリクエスト・レスポンスをシリアライズ／デシリアライズします。
-
+D
 
 Retrofit クライアント
 
