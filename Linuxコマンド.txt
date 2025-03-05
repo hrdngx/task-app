@@ -78,6 +78,19 @@ alter user 'root'@'localhost' identified by 'Harada?1221';
 /////////////////////////////////////////////////////////
 
 # dnf -y install git
+# git clone https://github.com/
+
+
+・Linuxではデフォルトでポートを開放していないので
+　ポートを開放する
+現在のファイアウォール設定を確認：
+sudo firewall-cmd --list-all
+ポート3000を開放：
+sudo firewall-cmd --zone=public --add-port=3000/tcp --permanent
+sudo firewall-cmd --reload
+設定が反映されたか確認：
+sudo firewall-cmd --list-ports
+ここに3000/tcpが含まれていれば成功
 
 
 

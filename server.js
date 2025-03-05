@@ -10,7 +10,8 @@ app.use(express.json({ limit: '10mb' }));
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
-  password: 'root12345',
+  //password: 'root12345',
+  password:'Harada?1221',
   database: 'taskun_data'
 });
 
