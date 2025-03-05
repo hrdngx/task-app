@@ -22,6 +22,8 @@ db.connect(err => {
   console.log('MySQL に接続しました。');
 });
 
+
+
 // ----------------------
 // 認証エンドポイント
 app.post('/register', (req, res) => {
@@ -226,9 +228,9 @@ app.post('/tasks/schedule', (req, res) => {
 
 
 const PORT = process.env.PORT || 3000;
-const HOST = '172.18.104.114';
-
+//const HOST = '172.18.104.114';
 //const HOST = '192.168.179.10';
+const HOST = '192.168.46.10';
 
 app.listen(PORT, HOST, () => {
   console.log(`サーバーは ${HOST}:${PORT} で起動中です。`);

@@ -1,0 +1,85 @@
+① SSHサーバーがインストールされているか確認
+AlmaLinuxにSSHサーバー (OpenSSH) がインストールされているか確認します。
+sudo dnf install -y openssh-server
+
+② SSHサービスの起動と自動起動設定
+sudo systemctl enable sshd
+sudo systemctl start sshd
+
+③ ファイアウォールでSSHを許可
+sudo firewall-cmd --add-service=ssh --permanent
+sudo firewall-cmd --reload
+
+SSHで接続するためのサーバーのIPアドレスを確認します。
+ip a
+192.168.46.133/24
+
+/////////////////////////////////////////////////
+
+ip route show->
+default via 192.168.46.2 dev ens160 proto dhcp metric 100
+→ ゲートウェイは 192.168.46.2
+
+DNSの確認->
+cat /etc/resolv.conf ->
+nameserver 192.168.46.2
+→ DNSも 192.168.46.2
+
+
+ネットワーク設定ファイル編集
+設定ファイルを編集
+対象のNIC（ens160）の設定ファイルは次のパスにあります：
+sudo vi /etc/NetworkManager/system-connections/ens160.nmconnection
+
+設定内容変更（固定IP設定）
+以下のように編集します（必要に応じて置き換え）。
+[ipv4]
+method=manual
+addresses=192.168.46.10/24
+gateway=192.168.46.2
+dns=192.168.46.2;
+
+
+3. NetworkManagerの再読み込み
+設定を反映するために、以下を実行します。
+sudo nmcli connection reload
+sudo nmcli connection down ens160
+sudo nmcli connection up ens160
+
+
+4. 設定確認
+再度IPアドレスなどを確認します。
+ip a
+ip route show
+cat /etc/resolv.conf
+->
+ファイル	/etc/NetworkManager/system-connections/ens160.nmconnection
+IP	192.168.46.10
+ゲートウェイ	192.168.46.2
+DNS	192.168.46.2
+
+////////////////////////////////////////////////////////
+初期設定
+mysqld起動+自動起動設定
+systemctl enable --now mysqld
+
+初期パスワード取得
+INIT_MYPASS=`grep "A temporary password" /var/log/mysqld.log | awk -F' ' '{print $13}'`
+echo $INIT_MYPASS
+
+root@localhostのパスワード変更
+mysql -uroot -p${INIT_MYPASS}
+alter user 'root'@'localhost'　identified by　'xxxxxx';
+exit
+mysql -uroot -p
+-> 変更したパスワードを入力してログイン確認
+alter user 'root'@'localhost' identified by 'Harada?1221';
+
+/////////////////////////////////////////////////////////
+
+# dnf -y install git
+
+
+
+
+
