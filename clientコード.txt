@@ -1,0 +1,1201 @@
+ implementation("androidx.navigation:navigation-compose:2.5.3")
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    implementation("com.google.accompanist:accompanist-pager:0.34.0")
+    implementation("com.google.accompanist:accompanist-pager-indicators:0.28.0")
+
+
+
+
+@file:OptIn(ExperimentalMaterial3Api::class)
+
+package com.example.taskun_app
+
+import AddedTask
+import DateRange
+import YearCalendarPager
+import com.example.taskun_app.year.*
+import android.app.DatePickerDialog
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Bundle
+import android.util.Base64
+import android.util.Log
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.Path
+import java.text.SimpleDateFormat
+import java.util.*
+
+// -------------------------------------------------
+// 定数タグ
+private const val TAG = "TaskunApp"
+
+// -------------------------------------------------
+// API用のデータクラス
+data class RegisterRequest(val username: String, val password: String, val displayName: String)
+data class RegisterResponse(val success: Boolean, val token: String?, val userId: Int?)
+data class LoginRequest(val username: String, val password: String)
+data class LoginResponse(val success: Boolean, val token: String?, val userId: Int?)
+
+// タスク関連
+data class TaskCreationRequest(val userId: Int, val title: String, val description: String)
+data class TaskCreationResponse(val success: Boolean, val taskId: Int?)
+data class TaskJoinRequest(val userId: Int, val taskId: Int)
+data class TaskJoinResponse(val success: Boolean)
+
+data class TaskData(
+    val id: Int,
+    val title: String,
+    val description: String,
+    val createdAt: String,
+    val creatorDisplayName: String,
+    val creatorProfileImage: String?
+)
+
+data class TaskListResponse(val success: Boolean, val tasks: List<TaskData>)
+
+// プロフィール更新・取得
+data class ProfileUpdateRequest(val userId: Int, val displayName: String, val description: String, val profileImageBase64: String?)
+data class ProfileUpdateResponse(val success: Boolean)
+data class ProfileDataResponse(
+    val success: Boolean,
+    val displayName: String,
+    val description: String,
+    val profileImageBase64: String?
+)
+
+// スケジュール関連
+data class ScheduleData(
+    val id: Int,
+    val scheduledDate: String,
+    val scheduleDescription: String,
+    val registeredUserName: String?,
+    val registeredUserProfileImage: String?
+)
+
+data class ScheduleListResponse(
+    val success: Boolean,
+    val schedules: List<ScheduleData>
+)
+data class ScheduleAddRequest(
+    val taskId: Int,
+    val scheduledDate: String,
+    val schedule: String,
+    val userId: Int
+)
+data class ScheduleAddResponse(
+    val success: Boolean,
+    val scheduleId: Int?
+)
+
+// -------------------------------------------------
+// Retrofit API インターフェース
+interface ApiService {
+    @POST("register")
+    suspend fun register(@Body request: RegisterRequest): RegisterResponse
+
+    @POST("login")
+    suspend fun login(@Body request: LoginRequest): LoginResponse
+
+    @POST("tasks")
+    suspend fun createTask(@Body request: TaskCreationRequest): TaskCreationResponse
+
+    @POST("tasks/join")
+    suspend fun joinTask(@Body request: TaskJoinRequest): TaskJoinResponse
+
+    @GET("tasks")
+    suspend fun getTasks(): TaskListResponse
+
+    @POST("profile")
+    suspend fun updateProfile(@Body request: ProfileUpdateRequest): ProfileUpdateResponse
+
+    @GET("profile/{userId}")
+    suspend fun getProfile(@Path("userId") userId: Int): ProfileDataResponse
+
+    @GET("tasks/schedule/{taskId}")
+    suspend fun getSchedules(@Path("taskId") taskId: Int): ScheduleListResponse
+
+    @POST("tasks/schedule")
+    suspend fun addSchedule(@Body request: ScheduleAddRequest): ScheduleAddResponse
+}
+
+// -------------------------------------------------
+// Retrofit クライアント
+object RetrofitClient {
+
+    private const val BASE_URL = "http://172.18.104.114:3000/"
+    //private const val  BASE_URL = "http://192.168.179.10:3000/"
+    //private const val BASE_URL = "http://192.168.46.10:3000/"
+
+    val apiService: ApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(ApiService::class.java)
+    }
+}
+
+// -------------------------------------------------
+// SessionManager（SharedPreferences を利用）
+class SessionManager(context: Context) {
+    private val prefs = context.getSharedPreferences("taskun_prefs", Context.MODE_PRIVATE)
+    companion object {
+        private const val KEY_TOKEN = "key_token"
+        private const val KEY_USER_ID = "key_user_id"
+    }
+    fun saveAuthToken(token: String) {
+        prefs.edit().putString(KEY_TOKEN, token).apply()
+    }
+    fun fetchAuthToken(): String? = prefs.getString(KEY_TOKEN, null)
+    fun saveUserId(userId: Int) {
+        prefs.edit().putInt(KEY_USER_ID, userId).apply()
+    }
+    fun fetchUserId(): Int = prefs.getInt(KEY_USER_ID, -1)
+    fun clearSession() {
+        prefs.edit().remove(KEY_TOKEN).remove(KEY_USER_ID).apply()
+    }
+}
+
+// -------------------------------------------------
+// Base64文字列からBitmapに変換
+fun decodeBase64ToBitmap(base64String: String): Bitmap? {
+    return try {
+        val decodedBytes = Base64.decode(base64String, Base64.DEFAULT)
+        BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+    } catch (e: Exception) {
+        Log.e(TAG, "Error decoding base64", e)
+        null
+    }
+}
+
+// -------------------------------------------------
+// プロフィール画像表示用 Composable
+@Composable
+fun ProfileImage(base64String: String, modifier: Modifier = Modifier) {
+    val bitmap = remember(base64String) { decodeBase64ToBitmap(base64String) }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "Profile Image",
+            modifier = modifier
+                .clip(CircleShape)
+                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        Icon(
+            imageVector = Icons.Filled.Person,
+            contentDescription = "Default Profile",
+            modifier = modifier
+        )
+    }
+}
+
+@Composable
+fun ProfileImagePreview(base64String: String) {
+    if (base64String.isNotEmpty()) {
+        ProfileImage(base64String, modifier = Modifier.size(100.dp))
+    } else {
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = "Select Profile Image",
+                modifier = Modifier.size(50.dp)
+            )
+        }
+    }
+}
+
+// -------------------------------------------------
+// MainActivity：ログイン/登録後のメイン画面遷移
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val sessionManager = SessionManager(applicationContext)
+        setContent {
+            MaterialTheme {
+                val navController = rememberNavController()
+                val startDestination = if (sessionManager.fetchAuthToken() != null) "main" else "register"
+                NavHost(navController = navController, startDestination = startDestination) {
+                    composable("register") { RegistrationScreen(navController, sessionManager) }
+                    composable("login") { LoginScreen(navController, sessionManager) }
+                    composable("main") {
+                        MainScreen(
+                            userId = sessionManager.fetchUserId(),
+                            sessionManager = sessionManager,
+                            outerNavController = navController
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------
+// 会員登録画面
+@Composable
+fun RegistrationScreen(navController: NavHostController, sessionManager: SessionManager) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
+        Text(text = "たすくん", style = MaterialTheme.typography.headlineMedium)
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("ユーザーネーム") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("パスワード") },
+            visualTransformation = PasswordVisualTransformation(),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = displayName,
+            onValueChange = { displayName = it },
+            label = { Text("表示名") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = {
+                isLoading = true
+                coroutineScope.launch {
+                    try {
+                        val response = RetrofitClient.apiService.register(
+                            RegisterRequest(username, password, displayName)
+                        )
+                        if (response.success && response.token != null && response.userId != null) {
+                            sessionManager.saveAuthToken(response.token)
+                            sessionManager.saveUserId(response.userId)
+                            navController.navigate("main") { popUpTo("register") { inclusive = true } }
+                        } else {
+                            Log.e(TAG, "Registration failed: response not successful")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Registration error", e)
+                    } finally {
+                        isLoading = false
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        ) {
+            Text("会員登録")
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "既に登録済みの方はこちら",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable {
+                navController.navigate("login") { popUpTo("register") { inclusive = true } }
+            }
+        )
+    }
+}
+
+// -------------------------------------------------
+// ログイン画面
+@Composable
+fun LoginScreen(navController: NavHostController, sessionManager: SessionManager) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
+        Text(text = "たすくん", style = MaterialTheme.typography.headlineMedium)
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("ユーザーネーム") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("パスワード") },
+            visualTransformation = PasswordVisualTransformation(),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = {
+                isLoading = true
+                coroutineScope.launch {
+                    try {
+                        val response = RetrofitClient.apiService.login(
+                            LoginRequest(username, password)
+                        )
+                        if (response.success && response.token != null && response.userId != null) {
+                            sessionManager.saveAuthToken(response.token)
+                            sessionManager.saveUserId(response.userId)
+                            navController.navigate("main") { popUpTo("login") { inclusive = true } }
+                        } else {
+                            Log.e(TAG, "Login failed: invalid credentials")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Login error", e)
+                    } finally {
+                        isLoading = false
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
+        ) {
+            Text("ログイン")
+        }
+    }
+}
+
+
+// -------------------------------------------------
+// NavHost 内のルート定義
+@Composable
+fun MainScreen(userId: Int, sessionManager: SessionManager, outerNavController: NavHostController) {
+    val innerNavController = rememberNavController()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("たすくん") },
+                actions = {
+                    IconButton(onClick = {
+                        sessionManager.clearSession()
+                        outerNavController.navigate("login") { popUpTo("main") { inclusive = true } }
+                    }) {
+                        Icon(Icons.Filled.ExitToApp, contentDescription = "Logout")
+                    }
+                }
+            )
+        },
+        bottomBar = { BottomNavigationBar(innerNavController) }
+    ) { innerPadding ->
+        NavHost(
+            navController = innerNavController,
+            startDestination = "taskList",
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable("taskList") { TaskListScreen(navController = innerNavController, userId = userId) }
+            composable("taskRegistration") { TaskRegistrationScreen(userId) }
+            composable("profileRegistration") { ProfileRegistrationScreen(userId) }
+            // タスクスケジュール管理画面：パラメータ付きルート
+            composable("taskScheduleManagement/{taskId}") { backStackEntry ->
+                val taskId = backStackEntry.arguments?.getString("taskId")?.toInt() ?: 0
+                TaskScheduleManagementScreen(taskId = taskId, navController = innerNavController)
+            }
+        }
+    }
+}
+
+
+
+
+// -------------------------------------------------
+// BottomNavigationBar
+sealed class Screen(val route: String, val label: String, val icon: @Composable () -> Unit) {
+    object TaskList : Screen("taskList", "タスクリスト", { Icon(Icons.Filled.List, contentDescription = null) })
+    object TaskRegistration : Screen("taskRegistration", "タスク登録", { Icon(Icons.Filled.Add, contentDescription = null) })
+    object ProfileRegistration : Screen("profileRegistration", "プロフィール", { Icon(Icons.Filled.Person, contentDescription = null) })
+}
+
+@Composable
+fun BottomNavigationBar(navController: NavHostController) {
+
+    val items = listOf(Screen.TaskList, Screen.TaskRegistration, Screen.ProfileRegistration)
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    NavigationBar {
+        items.forEach { screen ->
+            NavigationBarItem(
+                icon = screen.icon,
+                label = { Text(screen.label) },
+                selected = currentRoute?.startsWith(screen.route.substringBefore("/")) == true,
+                onClick = {
+                    navController.navigate(screen.route) {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun TaskListScreen(navController: NavHostController, userId: Int) {
+    var tasks by remember { mutableStateOf(listOf<TaskData>()) }
+
+    // 定期的にタスクを取得する処理
+    LaunchedEffect(Unit) {
+        while (true) {
+            try {
+                val response = RetrofitClient.apiService.getTasks()
+                if (response.success) {
+                    tasks = response.tasks
+                } else {
+                    Log.e(TAG, "タスク取得に失敗: レスポンスが不正")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "タスク取得エラー", e)
+            }
+            delay(5000) // 5秒毎に更新
+        }
+    }
+
+    // タスク一覧の表示
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        items(tasks) { task ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (task.creatorProfileImage != null) {
+                            ProfileImage(task.creatorProfileImage, modifier = Modifier.size(40.dp))
+                        } else {
+                            Icon(Icons.Filled.Person, contentDescription = "Profile", modifier = Modifier.size(40.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = task.creatorDisplayName, style = MaterialTheme.typography.bodyLarge)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = task.title, style = MaterialTheme.typography.headlineSmall)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = task.description, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = task.createdAt, style = MaterialTheme.typography.labelSmall)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    // rememberCoroutineScope を使ってコルーチンスコープを取得
+                    val coroutineScope = rememberCoroutineScope()
+
+                    Button(onClick = {
+                        coroutineScope.launch {
+                            try {
+                                // ネットワーク呼び出しはバックグラウンドで実行
+                                val joinResponse = withContext(Dispatchers.IO) {
+                                    RetrofitClient.apiService.joinTask(
+                                        TaskJoinRequest(userId = userId, taskId = task.id)
+                                    )
+                                }
+                                // ネットワーク処理が終わったら、メインスレッドでナビゲーションを実行
+                                if (joinResponse.success) {
+                                    navController.navigate("taskScheduleManagement/${task.id}")
+                                } else {
+                                    Log.e(TAG, "タスク参加に失敗しました")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "タスク参加処理でエラー", e)
+                            }
+                        }
+                    }) {
+                        Text("タスク参加")
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+// タスク登録画面
+@Composable
+fun TaskRegistrationScreen(userId: Int) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = { Text("タスクタイトル") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = { Text("タスク説明") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = {
+                coroutineScope.launch {
+                    try {
+                        val response = RetrofitClient.apiService.createTask(
+                            TaskCreationRequest(userId, title, description)
+                        )
+                        if (!response.success) {
+                            Log.e(TAG, "Task creation failed")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error creating task", e)
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("タスク登録")
+        }
+    }
+}
+
+
+// プロフィール登録画面
+@Composable
+fun ProfileRegistrationScreen(userId: Int) {
+    var displayName by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var profileImageBase64 by remember { mutableStateOf("") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(userId) {
+        try {
+            val response = RetrofitClient.apiService.getProfile(userId)
+            if (response.success) {
+                displayName = response.displayName  ?: ""
+                description = response.description  ?: ""
+                profileImageBase64 = response.profileImageBase64 ?: ""
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "プロフィール取得エラー", e)
+        } finally {
+            isLoading = false
+        }
+    }
+
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else {
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)) {
+            ProfileImagePreview(profileImageBase64)
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = displayName,
+                onValueChange = { displayName = it },
+                label = { Text("表示名") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("自己紹介") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            val launcher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.GetContent()
+            ) { uri: Uri? ->
+                if (uri != null) {
+                    selectedImageUri = uri
+                    try {
+                        val inputStream = context.contentResolver.openInputStream(uri)
+                        val bytes = inputStream?.readBytes()
+                        if (bytes != null) {
+                            profileImageBase64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "画像変換エラー", e)
+                    }
+                }
+            }
+            Button(onClick = { launcher.launch("image/*") }) {
+                Text("プロフィール画像を選択")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    coroutineScope.launch {
+                        try {
+                            val response = RetrofitClient.apiService.updateProfile(
+                                ProfileUpdateRequest(
+                                    userId = userId,
+                                    displayName = displayName,
+                                    description = description,
+                                    profileImageBase64 = if (profileImageBase64.isNotEmpty()) profileImageBase64 else null
+                                )
+                            )
+                            if (!response.success) {
+                                Log.e(TAG, "プロフィール更新失敗")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "プロフィール更新エラー", e)
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("プロフィール更新")
+            }
+        }
+    }
+}
+
+
+// ユーティリティ関数（日付フォーマットなど）
+fun isSameDay(date1: Date, date2: Date): Boolean {
+    val fmt = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
+    return fmt.format(date1) == fmt.format(date2)
+}
+
+fun formatDate(date: Date): String {
+    return SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(date)
+}
+
+
+// カレンダー範囲選択 Composable
+@Composable
+fun CalendarRangePicker(
+    currentRangeStart: Date?,
+    currentRangeEnd: Date?,
+    onDateSelected: (Date) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val calendar = Calendar.getInstance()
+    val year = calendar.get(Calendar.YEAR)
+    val month = calendar.get(Calendar.MONTH)
+    calendar.set(year, month, 1)
+    val firstDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+    val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val days = (1..daysInMonth).map { day ->
+        calendar.apply { set(year, month, day) }
+        calendar.time
+    }
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text("${year}年 ${month + 1}月", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+            listOf("日", "月", "火", "水", "木", "金", "土").forEach { day ->
+                Text(day, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+            }
+        }
+        val totalCells = ((daysInMonth + firstDayOfWeek - 1 + 6) / 7) * 7
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            modifier = Modifier
+                .height(300.dp)
+                .padding(4.dp)
+        ) {
+            items(totalCells) { index ->
+                val dayIndex = index - (firstDayOfWeek - 1)
+                if (dayIndex in 0 until daysInMonth) {
+                    val dayDate = days[dayIndex]
+                    val isInRange = if (currentRangeStart != null && currentRangeEnd != null) {
+                        !dayDate.before(currentRangeStart) && !dayDate.after(currentRangeEnd)
+                    } else false
+                    val isEdge = (currentRangeStart != null && isSameDay(dayDate, currentRangeStart)) ||
+                            (currentRangeEnd != null && isSameDay(dayDate, currentRangeEnd))
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .padding(2.dp)
+                            .clickable { onDateSelected(dayDate) }
+                            .background(
+                                when {
+                                    isEdge -> MaterialTheme.colorScheme.primary
+                                    isInRange -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                    else -> Color.Transparent
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(SimpleDateFormat("d", Locale.getDefault()).format(dayDate),
+                            color = if (isEdge) Color.White else Color.Black)
+                    }
+                } else {
+                    Box(modifier = Modifier
+                        .aspectRatio(1f)
+                        .padding(2.dp))
+                }
+            }
+        }
+    }
+}
+
+class AddedTaskViewModel : ViewModel() {
+    // 追加されたタスクを保持するリスト
+    val addedTasks = mutableStateListOf<AddedTask>()
+
+    fun addTask(task: AddedTask) {
+        addedTasks.add(task)
+    }
+}
+
+
+// タスクスケジュール管理用 ViewModel
+class TaskScheduleViewModel(private val taskId: Int) : ViewModel() {
+    var schedules by mutableStateOf<List<ScheduleData>>(emptyList())
+        private set
+
+    init { fetchSchedules() }
+
+    fun fetchSchedules() {
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.apiService.getSchedules(taskId)
+                if (response.success) {
+                    schedules = response.schedules
+                } else {
+                    Log.e(TAG, "Failed to fetch schedules")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching schedules", e)
+            }
+        }
+    }
+
+    fun addSchedule(startDate: Date, endDate: Date, description: String, userId: Int) {
+        viewModelScope.launch {
+            try {
+                val scheduledDateStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(startDate)
+                val formattedSchedule = "期間: ${formatDate(startDate)} ～ ${formatDate(endDate)} | $description"
+                val response = RetrofitClient.apiService.addSchedule(
+                    ScheduleAddRequest(taskId, scheduledDateStr, formattedSchedule, userId)
+                )
+                if (response.success) {
+                    fetchSchedules()
+                } else {
+                    Log.e(TAG, "Failed to add schedule")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding schedule", e)
+            }
+        }
+    }
+
+}
+
+
+@Composable
+fun TaskScheduleManagementScreen(taskId: Int, navController: NavHostController) {
+    if (taskId == 0) {
+        // タスクが選択されていない場合の表示
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("タスクが選択されていません。")
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { navController.navigate("taskList") }) {
+                Text("タスクリストへ")
+            }
+        }
+        return
+    }
+
+    // GET /tasks で全タスクを取得し、該当 taskId のタスクを抽出する
+    var taskData by remember { mutableStateOf<TaskData?>(null) }
+    LaunchedEffect(taskId) {
+        try {
+            val tasksResponse = RetrofitClient.apiService.getTasks()
+            if (tasksResponse.success) {
+                taskData = tasksResponse.tasks.find { it.id == taskId }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "タスク取得エラー", e)
+        }
+    }
+
+    // タスクスケジュール取得用の ViewModel
+    val scheduleViewModel: TaskScheduleViewModel = viewModel(factory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            TaskScheduleViewModel(taskId) as T
+    })
+
+    // 画面内の入力状態など
+    var selectedRanges by remember { mutableStateOf<List<DateRange>>(emptyList()) }
+    var taskDescription by remember { mutableStateOf("") }
+
+    // ユーザー情報の取得（必要なら）
+    var currentUserName by remember { mutableStateOf("") }
+    var currentUserProfileImage by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val sessionManagers = SessionManager(context)
+    val currentUserId = sessionManagers.fetchUserId()
+
+    LaunchedEffect(Unit) {
+        try {
+            val sessionManager = SessionManager(context)
+            val userId = sessionManager.fetchUserId()
+            val profileResponse = RetrofitClient.apiService.getProfile(userId)
+            if (profileResponse.success) {
+                currentUserName = profileResponse.displayName
+                currentUserProfileImage = profileResponse.profileImageBase64 ?: ""
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "プロフィール取得エラー", e)
+        }
+    }
+
+    // 画面全体をスクロール可能にする
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        // ここでタスク作成者の情報を表示（タスク取得が成功している場合）
+        taskData?.let { task ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!task.creatorProfileImage.isNullOrEmpty()) {
+                    ProfileImage(task.creatorProfileImage, modifier = Modifier.size(40.dp))
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = "Default Profile",
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(task.creatorDisplayName, style = MaterialTheme.typography.bodyLarge)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        Text("タスクのスケジュール管理", style = MaterialTheme.typography.headlineMedium)
+        Spacer(modifier = Modifier.height(16.dp))
+        // 年間カレンダー（横スワイプ）
+        YearCalendarPager(
+            selectedRanges = selectedRanges,
+            onSelectedRangesChange = { newRanges -> selectedRanges = newRanges }
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        if (selectedRanges.isNotEmpty()) {
+            selectedRanges.forEach { range ->
+                Text(
+                    "選択範囲: ${SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(range.start)} ～ " +
+                            "${SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(range.end)}"
+                )
+            }
+        } else {
+            Text("日付範囲を選択してください")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = taskDescription,
+            onValueChange = { taskDescription = it },
+            label = { Text("タスク説明") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                selectedRanges.forEach { range ->
+                    scheduleViewModel.addSchedule(range.start, range.end, taskDescription,currentUserId)
+                }
+                selectedRanges = emptyList()
+                taskDescription = ""
+            },
+            enabled = selectedRanges.isNotEmpty() && taskDescription.isNotBlank(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("送信")
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        // サーバーから取得した既存のスケジュールを表示する
+        Text("登録済みのタスク", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(8.dp))
+        if (scheduleViewModel.schedules.isEmpty()) {
+            Text("まだタスクは追加されていません")
+        } else {
+            scheduleViewModel.schedules.forEach { schedule ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // ユーザーアイコン表示
+                        if (!schedule.registeredUserProfileImage.isNullOrEmpty()) {
+                            ProfileImage(
+                                schedule.registeredUserProfileImage,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = "Default Profile",
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            // ユーザー名表示
+                            Text(
+                                text = schedule.registeredUserName ?: "不明なユーザー",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            // 予定日時・タスク内容の表示
+                            Text(
+                                text = "予定日時: ${schedule.scheduledDate}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "内容: ${schedule.scheduleDescription}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@file:OptIn(ExperimentalPagerApi::class)
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
+import com.example.taskun_app.TaskScheduleViewModel
+import com.google.accompanist.pager.ExperimentalPagerApi
+import com.google.accompanist.pager.HorizontalPager
+import com.google.accompanist.pager.HorizontalPagerIndicator
+import com.google.accompanist.pager.rememberPagerState
+import java.text.SimpleDateFormat
+import java.util.*
+
+// ------------------------------------------
+// 追加用のデータクラス
+data class DateRange(val start: Date, val end: Date)
+data class AddedTask(
+    val range: DateRange,
+    val description: String,
+    val userName: String,
+    val userProfileImage: String // Base64 文字列（空の場合はデフォルト画像を表示）
+)
+
+
+@Composable
+fun YearCalendarPager(
+    year: Int = Calendar.getInstance().get(Calendar.YEAR),
+    selectedRanges: List<DateRange>,
+    onSelectedRangesChange: (List<DateRange>) -> Unit
+) {
+    var currentSelectionStart by remember { mutableStateOf<Date?>(null) }
+    val pagerState = rememberPagerState(initialPage = Calendar.getInstance().get(Calendar.MONTH))
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        HorizontalPager(
+            count = 12,
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(350.dp)
+        ) { page ->
+            val month = page
+            val calendar = Calendar.getInstance().apply { set(year, month, 1) }
+            val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+            val firstDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+            val days = (1..daysInMonth).map { day ->
+                calendar.apply { set(year, month, day) }
+                calendar.time
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text = "$year 年 ${month + 1}月",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                // 曜日ヘッダー
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    listOf("日", "月", "火", "水", "木", "金", "土").forEach { day ->
+                        Text(day, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(7),
+                    modifier = Modifier
+                        .height(250.dp)
+                        .padding(4.dp)
+                ) {
+                    items(firstDayOfWeek - 1) {
+                        Box(
+                            modifier = Modifier
+                                .aspectRatio(1f)
+                                .padding(2.dp)
+                        )
+                    }
+                    items(days.size) { index ->
+                        val day = days[index]
+                        val isSelected = selectedRanges.any { range ->
+                            !day.before(range.start) && !day.after(range.end)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .aspectRatio(1f)
+                                .padding(2.dp)
+                                .clickable {
+                                    if (currentSelectionStart == null) {
+                                        currentSelectionStart = day
+                                    } else {
+                                        val start = if (day.before(currentSelectionStart)) day else currentSelectionStart!!
+                                        val end = if (day.before(currentSelectionStart)) currentSelectionStart!! else day
+                                        onSelectedRangesChange(selectedRanges + DateRange(start, end))
+                                        currentSelectionStart = null
+                                    }
+                                }
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                    else Color.Transparent
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = SimpleDateFormat("d", Locale.getDefault()).format(day),
+                                color = if (isSelected) Color.White else Color.Black
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        // 下部にスライドバー（ページインジケーター）を追加
+        HorizontalPagerIndicator(
+            pagerState = pagerState,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(16.dp)
+        )
+    }
+}
+
+

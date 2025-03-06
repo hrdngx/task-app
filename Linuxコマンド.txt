@@ -91,8 +91,3 @@ sudo firewall-cmd --reload
 設定が反映されたか確認：
 sudo firewall-cmd --list-ports
 ここに3000/tcpが含まれていれば成功
-
-
-
-
-
