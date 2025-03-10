@@ -1,2 +1,75 @@
 ユーザーネーム kisida
 password kisida
+
+
+
+
+
+
+// ----------------------
+// テーブル作成用SQL例（参考）
+// ユーザーテーブル
+/*
+CREATE TABLE users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(255) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  display_name VARCHAR(255) NOT NULL,
+  description TEXT,
+  profile_image LONGBLOB
+);
+*/
+
+// タスクテーブル
+/*
+CREATE TABLE tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  description TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  creator_id INT,
+  FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
+);
+*/
+
+// タスク参加テーブル
+/*
+CREATE TABLE task_participants (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT,
+  user_id INT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+*/
+
+// タスクスケジュールテーブル（最終確定用フラグ追加）
+/*
+CREATE TABLE task_schedules (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL,
+  scheduled_date DATETIME NOT NULL,
+  schedule_description TEXT,
+  finalized BOOLEAN DEFAULT false,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  registered_user_id INT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+*/
+
+// スケジュール投票テーブル
+/*
+CREATE TABLE schedule_votes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  schedule_id INT,
+  user_id INT,
+  vote TINYINT,
+  FOREIGN KEY (schedule_id) REFERENCES task_schedules(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+*/
+
+
+
+このコードにおいて、タスク編集画面における機能について、まだ足りてない機能や、まだ改善点がある機能や、
+ユーザーがほしい機能があったら、具体的に多く教えて

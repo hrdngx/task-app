@@ -48,11 +48,56 @@ CREATE TABLE task_schedules (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
+ALTER TABLE task_schedules ADD COLUMN registered_user_id INT;
+
+//////////////////////////////////////////////////////
 
 
 
-
-
+ users:
+// CREATE TABLE users (
+//   id INT AUTO_INCREMENT PRIMARY KEY,
+//   username VARCHAR(255) NOT NULL UNIQUE,
+//   password VARCHAR(255) NOT NULL,
+//   display_name VARCHAR(255) NOT NULL,
+//   description TEXT,
+//   profile_image LONGBLOB
+// );
+//
+// tasks:
+// CREATE TABLE tasks (
+//   id INT AUTO_INCREMENT PRIMARY KEY,
+//   title VARCHAR(255) NOT NULL,
+//   description TEXT NOT NULL,
+//   start_date DATE NOT NULL,
+//   end_date DATE NOT NULL,
+//   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+//   creator_id INT,
+//   FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
+// );
+//
+// task_day_proposals:
+// CREATE TABLE task_day_proposals (
+//   id INT AUTO_INCREMENT PRIMARY KEY,
+//   task_id INT NOT NULL,
+//   day DATE NOT NULL,
+//   time VARCHAR(10) NOT NULL,
+//   description TEXT,
+//   proposed_by INT,
+//   finalized BOOLEAN DEFAULT false,
+//   FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+//   FOREIGN KEY (proposed_by) REFERENCES users(id) ON DELETE CASCADE
+// );
+//
+// proposal_votes:
+// CREATE TABLE proposal_votes (
+//   id INT AUTO_INCREMENT PRIMARY KEY,
+//   proposal_id INT NOT NULL,
+//   user_id INT NOT NULL,
+//   FOREIGN KEY (proposal_id) REFERENCES task_day_proposals(id) ON DELETE CASCADE,
+//   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+// );
+//
 
 
 ////////////////////
@@ -75,3 +120,137 @@ SELECT * FROM users;
 bash
 コピーする
 mysql -u root -p taskun_data -e "SELECT * FROM users;"
+
+////////////////////////////////////////////////////////
+-- 全てのテーブル名を取得する
+SET GROUP_CONCAT_MAX_LEN=32768; -- GROUP_CONCATの長さ制限を設定
+SELECT GROUP_CONCAT(table_name SEPARATOR ', ') AS tables_to_drop
+FROM information_schema.tables
+WHERE table_schema = 'データベース名';
+
+-- 取得したテーブル名を使用して全てのテーブルを削除する
+SET @tables_to_drop = (
+    SELECT GROUP_CONCAT(table_name SEPARATOR ', ')
+    FROM information_schema.tables
+    WHERE table_schema = 'taskun_data'
+);
+
+SET @drop_query = CONCAT('DROP TABLE IF EXISTS ', @tables_to_drop, ';');
+
+-- テーブルを削除するクエリを実行する
+PREPARE stmt FROM @drop_query;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+////////////////////////////////////////////////////////
+
+
+-- ユーザーテーブル
+CREATE TABLE users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(255) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  display_name VARCHAR(255) NOT NULL,
+  description TEXT,
+  profile_image LONGBLOB,
+  status VARCHAR(50) DEFAULT '進行中'
+);
+
+-- タスクテーブル（status カラムを追加）
+CREATE TABLE tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  description TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  creator_id INT,
+  status VARCHAR(50) DEFAULT '進行中',
+  FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- タスク参加テーブル
+CREATE TABLE task_participants (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT,
+  user_id INT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- タスクスケジュールテーブル
+CREATE TABLE task_schedules (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL,
+  scheduled_date DATETIME NOT NULL,
+  schedule_description TEXT,
+  finalized BOOLEAN DEFAULT false,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  registered_user_id INT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (registered_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- スケジュール投票テーブル
+CREATE TABLE schedule_votes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  schedule_id INT,
+  user_id INT,
+  vote TINYINT,
+  FOREIGN KEY (schedule_id) REFERENCES task_schedules(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+
+//////////////////////////////////////////////////////////////////////
+-- ユーザーテーブル
+CREATE TABLE users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  display_name VARCHAR(100) NOT NULL,
+  description TEXT,
+  profile_image LONGBLOB,
+  status VARCHAR(50) DEFAULT '進行中'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- タスクテーブル
+CREATE TABLE tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(50) NOT NULL,
+  description TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  creator_id INT,
+  status VARCHAR(50) DEFAULT '進行中',
+  FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- タスク参加テーブル
+CREATE TABLE task_participants (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL,
+  user_id INT NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- タスクスケジュールテーブル
+CREATE TABLE task_schedules (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL,
+  scheduled_date DATETIME NOT NULL,
+  schedule_description TEXT,
+  finalized BOOLEAN DEFAULT false,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  registered_user_id INT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (registered_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- スケジュール投票テーブル
+CREATE TABLE schedule_votes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  schedule_id INT NOT NULL,
+  user_id INT NOT NULL,
+  vote TINYINT,
+  FOREIGN KEY (schedule_id) REFERENCES task_schedules(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
