@@ -3,10 +3,8 @@ const mysql = require('mysql2');
 const crypto = require('crypto');
 
 const app = express();
-// 画像や大きなペイロードも受け取れるように（10MBまで）
 app.use(express.json({ limit: '10mb' }));
 
-// MySQL 接続設定（環境に合わせて変更）
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
@@ -22,7 +20,6 @@ db.connect(err => {
   console.log('MySQL に接続しました。');
 });
 
-// 簡易入力検証関数
 function validateString(input, fieldName, minLen = 1, maxLen = 100) {
   if (!input || typeof input !== 'string' || input.trim().length < minLen) {
     return `${fieldName}は必須です。`;
@@ -148,6 +145,7 @@ app.post('/tasks/edit', (req, res) => {
   });
 });
 
+
 app.post('/tasks/complete', (req, res) => {
   const { taskId } = req.body;
   if (!taskId) {
@@ -162,6 +160,24 @@ app.post('/tasks/complete', (req, res) => {
     res.json({ success: true });
   });
 });
+
+
+// ★ 新規追加：タスク削除エンドポイント
+app.post('/tasks/delete', (req, res) => {
+  const { taskId } = req.body;
+  if (!taskId) {
+    return res.status(400).json({ success: false, message: 'taskId は必須です。' });
+  }
+  const query = 'DELETE FROM tasks WHERE id = ?';
+  db.query(query, [taskId], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ success: false, message: 'データベースエラー' });
+    }
+    res.json({ success: true });
+  });
+});
+
 
 app.post('/tasks/join', (req, res) => {
   const { userId, taskId } = req.body;
@@ -188,6 +204,7 @@ app.post('/tasks/join', (req, res) => {
   });
 });
 
+
 // ----------------------
 // プロフィール取得／更新
 app.get('/profile/:userId', (req, res) => {
@@ -210,6 +227,7 @@ app.get('/profile/:userId', (req, res) => {
     });
   });
 });
+
 
 app.post('/profile', (req, res) => {
   const { userId, displayName, description, profileImageBase64 } = req.body;
@@ -236,6 +254,7 @@ app.post('/profile', (req, res) => {
   });
 });
 
+
 // ----------------------
 // タスクスケジュール取得／追加／編集／削除
 app.get('/tasks/schedule/:taskId', (req, res) => {
@@ -249,6 +268,8 @@ app.get('/tasks/schedule/:taskId', (req, res) => {
     WHERE ts.task_id = ?
     ORDER BY ts.scheduled_date ASC
   `;
+
+
   db.query(query, [taskId], (err, results) => {
     if (err) {
       console.error(err);
@@ -265,6 +286,7 @@ app.get('/tasks/schedule/:taskId', (req, res) => {
     res.json({ success: true, schedules });
   });
 });
+
 
 app.post('/tasks/schedule', (req, res) => {
   const { taskId, scheduledDate, schedule, userId } = req.body;
@@ -285,6 +307,7 @@ app.post('/tasks/schedule', (req, res) => {
   });
 });
 
+
 app.post('/tasks/schedule/edit', (req, res) => {
   const { scheduleId, scheduledDate, schedule } = req.body;
   let error = validateString(scheduledDate, "日時", 1, 50) || validateString(schedule, "スケジュール内容", 1, 200);
@@ -301,6 +324,7 @@ app.post('/tasks/schedule/edit', (req, res) => {
   });
 });
 
+
 app.post('/tasks/schedule/delete', (req, res) => {
   const { scheduleId } = req.body;
   if (!scheduleId) {
@@ -316,8 +340,7 @@ app.post('/tasks/schedule/delete', (req, res) => {
   });
 });
 
-// ----------------------
-// スケジュール投票／詳細取得
+
 app.get('/tasks/schedule/votes/:scheduleId', (req, res) => {
   const { scheduleId } = req.params;
   const query = 'SELECT COUNT(*) AS voteCount FROM schedule_votes WHERE schedule_id = ?';
@@ -329,6 +352,7 @@ app.get('/tasks/schedule/votes/:scheduleId', (req, res) => {
     res.json({ success: true, voteCount: results[0].voteCount });
   });
 });
+
 
 app.post('/tasks/schedule/vote', (req, res) => {
   const { scheduleId, userId } = req.body;
@@ -362,6 +386,8 @@ app.post('/tasks/schedule/vote', (req, res) => {
   });
 });
 
+
+
 app.get('/tasks/schedule/voteDetails/:scheduleId', (req, res) => {
   const { scheduleId } = req.params;
   const query = `
@@ -384,8 +410,7 @@ app.get('/tasks/schedule/voteDetails/:scheduleId', (req, res) => {
   });
 });
 
-// ----------------------
-// タスク参加者一覧
+
 app.get('/tasks/participants/:taskId', (req, res) => {
   const { taskId } = req.params;
   const query = `
@@ -408,8 +433,6 @@ app.get('/tasks/participants/:taskId', (req, res) => {
   });
 });
 
-// ----------------------
-// タスクスケジュール確定
 app.post('/tasks/schedule/finalize', (req, res) => {
   const { taskId, scheduleId } = req.body;
   if (!taskId || !scheduleId) {
@@ -426,9 +449,12 @@ app.post('/tasks/schedule/finalize', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+//const HOST = '172.18.104.114';
 //const HOST = '192.168.179.10';
-const HOST = '172.18.104.114';
+//const HOST = '172.18.104.114';
+//const HOST = '192.168.32.114';
 
+const HOST = '192.168.179.10';
 app.listen(PORT, HOST, () => {
   console.log(`サーバーは ${HOST}:${PORT} で起動中です。`);
 });
