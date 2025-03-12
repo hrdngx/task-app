@@ -8,7 +8,7 @@ app.use(express.json({ limit: '10mb' }));
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
-  password: 'root12345',
+  password: 'Harada?1221',
   database: 'taskun_data'
 });
 
@@ -457,7 +457,8 @@ app.post('/tasks/schedule/finalize', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-const HOST = '172.18.104.114';
+//const HOST = '172.18.104.114';
+const HOST = '172.18.88.46';
 
 
 app.listen(PORT, HOST, () => {
