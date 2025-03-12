@@ -12,6 +12,7 @@ const db = mysql.createConnection({
   database: 'taskun_data'
 });
 
+
 db.connect(err => {
   if (err) {
     console.error('MySQL 接続エラー:', err);
@@ -19,6 +20,7 @@ db.connect(err => {
   }
   console.log('MySQL に接続しました。');
 });
+
 
 function validateString(input, fieldName, minLen = 1, maxLen = 100) {
   if (!input || typeof input !== 'string' || input.trim().length < minLen) {
@@ -32,6 +34,7 @@ function validateString(input, fieldName, minLen = 1, maxLen = 100) {
   }
   return null;
 }
+
 
 // ----------------------
 // 認証エンドポイント
@@ -64,6 +67,7 @@ app.post('/register', (req, res) => {
   });
 });
 
+
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
   let error = validateString(username, "ユーザーネーム", 1, 50) || validateString(password, "パスワード", 6, 255);
@@ -72,12 +76,13 @@ app.post('/login', (req, res) => {
   }
   const query = 'SELECT * FROM users WHERE username = ? AND password = ?';
   db.query(query, [username, password], (err, results) => {
+    
+    if (results.length === 0) {
+      return res.status(400).json({ success: false, message: 'ユーザーネームまたはパスワードが間違っています！' });
+    }
     if (err) {
       console.error(err);
       return res.status(500).json({ success: false, message: 'データベースエラー' });
-    }
-    if (results.length === 0) {
-      return res.status(400).json({ success: false, message: 'ユーザ名またはパスワードが正しくありません。' });
     }
     const token = crypto.randomBytes(16).toString('hex');
     res.json({ success: true, token, userId: results[0].id });
@@ -113,6 +118,7 @@ app.get('/tasks', (req, res) => {
   });
 });
 
+
 app.post('/tasks', (req, res) => {
   const { userId, title, description } = req.body;
   let error = validateString(title, "タスクタイトル", 1, 50) || validateString(description, "タスク説明", 1, 200);
@@ -128,6 +134,7 @@ app.post('/tasks', (req, res) => {
     res.json({ success: true, taskId: result.insertId });
   });
 });
+
 
 app.post('/tasks/edit', (req, res) => {
   const { taskId, title, description } = req.body;
@@ -433,6 +440,7 @@ app.get('/tasks/participants/:taskId', (req, res) => {
   });
 });
 
+
 app.post('/tasks/schedule/finalize', (req, res) => {
   const { taskId, scheduleId } = req.body;
   if (!taskId || !scheduleId) {
@@ -449,12 +457,9 @@ app.post('/tasks/schedule/finalize', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-//const HOST = '172.18.104.114';
-//const HOST = '192.168.179.10';
-//const HOST = '172.18.104.114';
-//const HOST = '192.168.32.114';
+const HOST = '172.18.104.114';
 
-const HOST = '192.168.179.10';
+
 app.listen(PORT, HOST, () => {
   console.log(`サーバーは ${HOST}:${PORT} で起動中です。`);
 });
