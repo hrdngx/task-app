@@ -8,9 +8,18 @@ app.use(express.json({ limit: '10mb' }));
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
-  password: 'Harada?1221',
+  password: 'root12345',
+  //password: 'Harada?1221',
   database: 'taskun_data'
 });
+
+
+// 全てのレスポンスに Content-Type ヘッダーを付与（charset=utf-8 を明示）
+app.use((req, res, next) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
+
 
 
 db.connect(err => {
@@ -38,6 +47,7 @@ function validateString(input, fieldName, minLen = 1, maxLen = 100) {
 
 // ----------------------
 // 認証エンドポイント
+/*
 app.post('/register', (req, res) => {
   const { username, password, displayName } = req.body;
   let error = validateString(username, "ユーザーネーム", 1, 50) ||
@@ -65,9 +75,42 @@ app.post('/register', (req, res) => {
       res.json({ success: true, token, userId: result.insertId });
     });
   });
+});*/
+app.post('/register', (req, res) => {
+  console.log("POST /register called with body:", req.body);
+  const { username, password, displayName } = req.body;
+  let error = validateString(username, "ユーザーネーム", 1, 50) ||
+              validateString(password, "パスワード", 6, 255) ||
+              validateString(displayName, "表示名", 1, 100);
+  if (error) {
+    console.log("Validation error in /register:", error);
+    return res.status(400).json({ success: false, message: error });
+  }
+  const checkQuery = 'SELECT * FROM users WHERE username = ?';
+  db.query(checkQuery, [username], (err, results) => {
+    if (err) {
+      console.error("Database error in /register:", err);
+      return res.status(500).json({ success: false, message: 'データベースエラー' });
+    }
+    if (results.length > 0) {
+      console.log("Username already exists:", username);
+      return res.status(400).json({ success: false, message: '既に存在するユーザ名です。' });
+    }
+    const insertQuery = 'INSERT INTO users (username, password, display_name, status) VALUES (?, ?, ?, "進行中")';
+    db.query(insertQuery, [username, password, displayName], (err, result) => {
+      if (err) {
+        console.error("Database error during INSERT in /register:", err);
+        return res.status(500).json({ success: false, message: 'データベースエラー' });
+      }
+      const token = crypto.randomBytes(16).toString('hex');
+      console.log("User registered successfully with id:", result.insertId);
+      res.json({ success: true, token, userId: result.insertId });
+    });
+  });
 });
 
 
+/*
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
   let error = validateString(username, "ユーザーネーム", 1, 50) || validateString(password, "パスワード", 6, 255);
@@ -87,7 +130,31 @@ app.post('/login', (req, res) => {
     const token = crypto.randomBytes(16).toString('hex');
     res.json({ success: true, token, userId: results[0].id });
   });
+});*/
+app.post('/login', (req, res) => {
+  console.log("POST /login called with body:", req.body);
+  const { username, password } = req.body;
+  let error = validateString(username, "ユーザーネーム", 1, 50) || validateString(password, "パスワード", 6, 255);
+  if (error) {
+    console.log("Validation error in /login:", error);
+    return res.status(400).json({ success: false, message: error });
+  }
+  const query = 'SELECT * FROM users WHERE username = ? AND password = ?';
+  db.query(query, [username, password], (err, results) => {
+    if (err) {
+      console.error("Database error in /login:", err);
+      return res.status(500).json({ success: false, message: 'データベースエラー' });
+    }
+    if (results.length === 0) {
+      console.log("Login failed: Invalid credentials for username:", username);
+      return res.status(400).json({ success: false, message: 'ユーザーネームまたはパスワードが間違っています！' });
+    }
+    const token = crypto.randomBytes(16).toString('hex');
+    console.log("Login successful for username:", username, "UserID:", results[0].id);
+    res.json({ success: true, token, userId: results[0].id });
+  });
 });
+
 
 // ----------------------
 // タスク関連エンドポイント
@@ -214,6 +281,7 @@ app.post('/tasks/join', (req, res) => {
 
 // ----------------------
 // プロフィール取得／更新
+/*
 app.get('/profile/:userId', (req, res) => {
   const userId = req.params.userId;
   const query = 'SELECT display_name, description, profile_image FROM users WHERE id = ?';
@@ -233,9 +301,60 @@ app.get('/profile/:userId', (req, res) => {
       profileImageBase64: user.profile_image ? Buffer.from(user.profile_image).toString('base64') : null
     });
   });
+});*/
+
+
+// ユーザープロフィール取得／更新
+/*
+app.get('/profile/:userId', (req, res) => {
+  const userId = req.params.userId;
+  const query = 'SELECT display_name, description, profile_image, secret_question FROM users WHERE id = ?';
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ success: false, message: 'データベースエラー' });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
+    }
+    const user = results[0];
+    res.json({
+      success: true,
+      displayName: user.display_name,
+      description: user.description,
+      profileImageBase64: user.profile_image ? Buffer.from(user.profile_image).toString('base64') : null,
+      secretQuestion: user.secret_question || null
+    });
+  });
+});*/
+
+// プロフィール取得エンドポイント
+app.get('/profile/:userId', (req, res) => {
+  console.log("GET /profile called with params:", req.params);
+  const userId = req.params.userId;
+  const query = 'SELECT display_name, description, profile_image, secret_question FROM users WHERE id = ?';
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error("Database error in /profile:", err);
+      return res.status(500).json({ success: false, message: 'データベースエラー' });
+    }
+    if (results.length === 0) {
+      console.log("No user found with id:", userId);
+      return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
+    }
+    const user = results[0];
+    console.log("Profile fetched for user id:", userId);
+    res.json({
+      success: true,
+      displayName: user.display_name,
+      description: user.description,
+      profileImageBase64: user.profile_image ? Buffer.from(user.profile_image).toString('base64') : null,
+      secretQuestion: user.secret_question || null
+    });
+  });
 });
 
-
+/*
 app.post('/profile', (req, res) => {
   const { userId, displayName, description, profileImageBase64 } = req.body;
   let error = validateString(displayName, "表示名", 1, 100);
@@ -259,7 +378,39 @@ app.post('/profile', (req, res) => {
     }
     res.json({ success: true });
   });
+});*/
+
+
+// プロフィール更新エンドポイント
+app.post('/profile', (req, res) => {
+  console.log("POST /profile called with body:", req.body);
+  const { userId, displayName, description, profileImageBase64, secretQuestion, secretAnswer } = req.body;
+  let error = validateString(displayName, "表示名", 1, 100);
+  if (!userId || error) {
+    console.log("Validation error in /profile update:", error || 'userId が不足しています。');
+    return res.status(400).json({ success: false, message: error || 'userId と displayName は必須です。' });
+  }
+  let imageBuffer = null;
+  if (profileImageBase64) {
+    try {
+      imageBuffer = Buffer.from(profileImageBase64, 'base64');
+    } catch (e) {
+      console.error("Error converting profileImageBase64 in /profile:", e);
+      return res.status(400).json({ success: false, message: 'Invalid profileImageBase64 format' });
+    }
+  }
+  const query = 'UPDATE users SET display_name = ?, description = ?, profile_image = ?, secret_question = ?, secret_answer = ? WHERE id = ?';
+  db.query(query, [displayName, description || null, imageBuffer, secretQuestion || null, secretAnswer || null, userId], (err, result) => {
+    if (err) {
+      console.error("Database error in /profile update:", err);
+      return res.status(500).json({ success: false, message: 'データベースエラー' });
+    }
+    console.log("Profile updated for user id:", userId);
+    res.json({ success: true });
+  });
 });
+
+
 
 
 // ----------------------
@@ -456,9 +607,90 @@ app.post('/tasks/schedule/finalize', (req, res) => {
   });
 });
 
+
+
+
+// ----------------------
+// GET /secretQuestion エンドポイント
+app.get('/secretQuestion', (req, res) => {
+  console.log("GET /secretQuestion called with query:", req.query);
+  const username = req.query.username;
+  if (!username) {
+    console.log("username not provided in /secretQuestion");
+    return res.status(400).json({ success: false, message: 'username は必須です。' });
+  }
+  const query = 'SELECT secret_question FROM users WHERE username = ?';
+  db.query(query, [username], (err, results) => {
+    if (err) {
+      console.error("Database error in /secretQuestion:", err);
+      return res.status(500).json({ success: false, message: 'データベースエラー' });
+    }
+    if (results.length === 0) {
+      console.log("No user found with username in /secretQuestion:", username);
+      return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
+    }
+    const secretQuestion = results[0].secret_question;
+    console.log("Fetched secret question for user", username, ":", secretQuestion);
+    if (!secretQuestion) {
+      console.log("Secret question not set for user", username);
+      return res.status(400).json({ success: false, message: '秘密の質問が登録されていません。新規登録してください。' });
+    }
+    res.json({ success: true, secretQuestion });
+  });
+});
+
+
+
+
+// ----------------------
+// POST /resetPassword エンドポイント
+app.post('/resetPassword', (req, res) => {
+  console.log("POST /resetPassword called with body:", req.body);
+  const { username, secretAnswer, newPassword } = req.body;
+  let error = validateString(username, "ユーザーネーム", 1, 50) || validateString(newPassword, "パスワード", 6, 255);
+  if (error || !secretAnswer) {
+    console.log("Validation error in /resetPassword:", error || 'secretAnswer は不足しています。');
+    return res.status(400).json({ success: false, message: error || 'secretAnswer は必須です。' });
+  }
+  const query = 'SELECT secret_answer FROM users WHERE username = ?';
+  db.query(query, [username], (err, results) => {
+    if (err) {
+      console.error("Database error in /resetPassword (select):", err);
+      return res.status(500).json({ success: false, message: 'データベースエラー' });
+    }
+    if (results.length === 0) {
+      console.log("User not found in /resetPassword:", username);
+      return res.status(404).json({ success: false, message: 'ユーザーが見つかりません' });
+    }
+    const storedSecretAnswer = results[0].secret_answer;
+    console.log("Stored secret answer for user", username, ":", storedSecretAnswer);
+    if (!storedSecretAnswer) {
+      console.log("Secret question not registered for user", username);
+      return res.status(400).json({ success: false, message: '秘密の質問が登録されていません。新規登録してください。' });
+    }
+    if (storedSecretAnswer !== secretAnswer) {
+      console.log("Secret answer mismatch for user", username);
+      return res.status(400).json({ success: false, message: '秘密の質問の答えが正しくありません。' });
+    }
+    const updateQuery = 'UPDATE users SET password = ? WHERE username = ?';
+    db.query(updateQuery, [newPassword, username], (err, result) => {
+      if (err) {
+        console.error("Error updating password for user", username, ":", err);
+        return res.status(500).json({ success: false, message: 'データベースエラー' });
+      }
+      console.log("Password updated successfully for user", username);
+      res.json({ success: true, message: 'パスワードがリセットされました。' });
+    });
+  });
+});
+
+
+
 const PORT = process.env.PORT || 3000;
 //const HOST = '172.18.104.114';
-const HOST = '172.18.88.46';
+//const HOST = '172.18.88.46';
+//const HOST = '192.168.179.10';
+const HOST ='172.18.104.114';
 
 
 app.listen(PORT, HOST, () => {

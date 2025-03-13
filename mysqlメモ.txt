@@ -201,6 +201,8 @@ CREATE TABLE schedule_votes (
 
 
 //////////////////////////////////////////////////////////////////////
+
+
 -- ユーザーテーブル
 CREATE TABLE users (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -212,6 +214,7 @@ CREATE TABLE users (
   status VARCHAR(50) DEFAULT '進行中'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+
 -- タスクテーブル
 CREATE TABLE tasks (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -222,6 +225,9 @@ CREATE TABLE tasks (
   status VARCHAR(50) DEFAULT '進行中',
   FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+
 
 -- タスク参加テーブル
 CREATE TABLE task_participants (
@@ -254,3 +260,6 @@ CREATE TABLE schedule_votes (
   FOREIGN KEY (schedule_id) REFERENCES task_schedules(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+
