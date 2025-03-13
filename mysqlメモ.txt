@@ -211,6 +211,8 @@ CREATE TABLE users (
   display_name VARCHAR(100) NOT NULL,
   description TEXT,
   profile_image LONGBLOB,
+  secret_question VARCHAR(255) DEFAULT NULL,
+  secret_answer VARCHAR(255)  DEFAULT NULL,
   status VARCHAR(50) DEFAULT '進行中'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

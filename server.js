@@ -9,8 +9,8 @@ const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
   password: 'root12345',
-  //password: 'Harada?1221',
-  database: 'taskun_data'
+  password: 'Harada?1221',
+  //database: 'taskun_data'
 });
 
 
@@ -690,7 +690,8 @@ const PORT = process.env.PORT || 3000;
 //const HOST = '172.18.104.114';
 //const HOST = '172.18.88.46';
 //const HOST = '192.168.179.10';
-const HOST ='172.18.104.114';
+//const HOST ='172.18.104.114';
+const HOST = '172.18.88.46';
 
 
 app.listen(PORT, HOST, () => {
