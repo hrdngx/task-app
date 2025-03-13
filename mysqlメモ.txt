@@ -265,3 +265,6 @@ CREATE TABLE schedule_votes (
 
 
 
+ALTER TABLE users 
+  ADD COLUMN secret_question VARCHAR(255) DEFAULT NULL,
+  ADD COLUMN secret_answer VARCHAR(255) DEFAULT NULL;
